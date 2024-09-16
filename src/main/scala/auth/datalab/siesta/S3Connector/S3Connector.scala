@@ -181,7 +181,11 @@ class S3Connector extends DBConnector{
       val df: DataFrame = sequenceRDD.filter(_.isInstanceOf[DetailedEvent]).map(_.asInstanceOf[DetailedEvent])
         .map(y => (y.event_type, y.start_timestamp, y.timestamp, y.waiting_time, y.resource))
         .toDF("trace_id", "event_type", "position", "start_timestamp", "end_timestamp", "waiting_time", "resource")
-      df.write.mode(SaveMode.Append).parquet(detailed_table)
+      df.repartition(col("trace_id")) //partition based on the trace_id
+        .write
+        .partitionBy("trace_id")
+        .mode(SaveMode.Append)
+        .parquet(detailed_table) //store to s3
     }
 
     else {
@@ -190,7 +194,11 @@ class S3Connector extends DBConnector{
         .toDF("trace_id", "event_type", "position", "timestamp")
       metaData.traces += df.filter(_.getAs[Int]("position") == 0).count() //add only new traces in this batch
       metaData.events += df.count()
-      df.write.mode(SaveMode.Append).parquet(seq_table)
+      df.repartition(col("trace_id")) //partition based on the trace_id
+        .write
+        .partitionBy("trace_id")
+        .mode(SaveMode.Append)
+        .parquet(seq_table) //store to s3
     }
     val total = System.currentTimeMillis() - start
     Logger.getLogger("Sequence Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
